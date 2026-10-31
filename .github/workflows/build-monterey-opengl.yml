@@ -1,0 +1,51 @@
+name: Build Monterey OpenGL Debian package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out build inputs
+        uses: actions/checkout@v4
+
+      - name: Free space on the macOS runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          active_xcode="$(dirname "$(dirname "$(xcode-select -p)")")"
+          for xcode in /Applications/Xcode*.app; do
+            [[ -d "$xcode" ]] || continue
+            if [[ "$xcode" != "$active_xcode" ]]; then
+              sudo rm -rf "$xcode"
+            fi
+          done
+          xcrun simctl delete all || true
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          df -h /
+
+      - name: Unpack Monterey OpenGL source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-source
+          unzip -q VirtualMacOniPad-monterey-opengl-source.zip -d build-source
+          test -x build-source/VirtualMac/setup.sh
+
+      - name: Build Debian package
+        working-directory: build-source/VirtualMac
+        run: ./setup.sh --non-interactive
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualMac-monterey-opengl-deb
+          path: build-source/VirtualMac/build/release/VirtualMac_*.deb
+          if-no-files-found: error
+          retention-days: 14
